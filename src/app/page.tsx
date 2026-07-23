@@ -13,7 +13,8 @@ import {
   X,
   CreditCard,
   Laptop,
-  Check
+  Check,
+  Loader2,
 } from "lucide-react";
 
 export default function Home() {
@@ -22,7 +23,7 @@ export default function Home() {
   // Loan Calculator State
   const [loanAmount, setLoanAmount] = useState<number>(1000);
   const [loanTermMonths, setLoanTermMonths] = useState<number>(1);
-  const monthlyInterestRate = 0.30; // 30% per month
+  const monthlyInterestRate = 0.3; // 30% per month
 
   const totalInterest = Math.round(loanAmount * monthlyInterestRate * loanTermMonths);
   const totalRepayment = Math.round(loanAmount + totalInterest);
@@ -32,6 +33,9 @@ export default function Home() {
   const [isLoanModalOpen, setIsLoanModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
+
+  // Submission State
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form Field States
   const [formData, setFormData] = useState({
@@ -49,12 +53,54 @@ export default function Home() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleLoanSubmit = (e: React.FormEvent) => {
+  // Safe JSON Parsing Submission Handler
+  const handleLoanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittedMessage(
-      `Thank you ${formData.fullName}! Your loan application for R${loanAmount.toLocaleString()} (${loanTermMonths} mo) has been received. Liyema Vanda will review it shortly.`
-    );
-    setIsLoanModalOpen(false);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/apply-loan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          userType: formData.userType,
+          monthlyIncome: formData.monthlyIncome,
+          loanAmount,
+          loanTermMonths,
+          totalInterest,
+          totalRepayment,
+          monthlyRepayment,
+        }),
+      });
+
+      // Safely parse JSON or capture plain text/HTML error from server
+      const text = await response.text();
+      let resData;
+      try {
+        resData = JSON.parse(text);
+      } catch (e) {
+        console.error("Server returned non-JSON response:", text);
+        alert(`Server error (${response.status}): Check browser console or terminal logs.`);
+        return;
+      }
+
+      if (response.ok && resData.success) {
+        setSubmittedMessage(
+          `Thank you ${formData.fullName}! Your loan application for R${loanAmount.toLocaleString()} (${loanTermMonths} mo) has been submitted successfully via email. We will review it shortly.`
+        );
+        setIsLoanModalOpen(false);
+      } else {
+        alert(`Failed to send application: ${resData.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("An unexpected error occurred while submitting your application.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleTechSubmit = (e: React.FormEvent) => {
@@ -301,7 +347,9 @@ export default function Home() {
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-2">
                   <label className="text-sm text-slate-400 font-medium">Loan Amount</label>
-                  <span className="text-xl font-bold text-emerald-400">R{loanAmount.toLocaleString()}</span>
+                  <span className="text-xl font-bold text-emerald-400">
+                    R{loanAmount.toLocaleString()}
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -362,7 +410,9 @@ export default function Home() {
                 <hr className="border-slate-800 my-2" />
                 <div className="flex justify-between items-center text-base font-bold">
                   <span className="text-slate-200">Monthly Payment</span>
-                  <span className="text-emerald-400 text-lg">R{monthlyRepayment.toLocaleString()} / mo</span>
+                  <span className="text-emerald-400 text-lg">
+                    R{monthlyRepayment.toLocaleString()} / mo
+                  </span>
                 </div>
               </div>
 
@@ -432,18 +482,23 @@ export default function Home() {
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative">
             <button
               onClick={() => setIsLoanModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              disabled={isSubmitting}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white disabled:opacity-50"
             >
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-xl font-extrabold text-white mb-1">Loan Application</h3>
             <p className="text-xs text-slate-400 mb-4">
-              Applying for <span className="text-emerald-400 font-bold">R{loanAmount.toLocaleString()}</span> over <span className="text-emerald-400 font-bold">{loanTermMonths} month(s)</span>.
+              Applying for{" "}
+              <span className="text-emerald-400 font-bold">R{loanAmount.toLocaleString()}</span>{" "}
+              over <span className="text-emerald-400 font-bold">{loanTermMonths} month(s)</span>.
             </p>
 
             <form onSubmit={handleLoanSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Full Name
+                </label>
                 <input
                   type="text"
                   name="fullName"
@@ -457,7 +512,9 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Email
+                  </label>
                   <input
                     type="email"
                     name="email"
@@ -469,7 +526,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Phone / WhatsApp</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Phone / WhatsApp
+                  </label>
                   <input
                     type="tel"
                     name="phone"
@@ -484,7 +543,9 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Applicant Type</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Applicant Type
+                  </label>
                   <select
                     name="userType"
                     value={formData.userType}
@@ -496,7 +557,9 @@ export default function Home() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Est. Monthly Income</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Est. Monthly Income
+                  </label>
                   <input
                     type="text"
                     name="monthlyIncome"
@@ -511,9 +574,18 @@ export default function Home() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm transition-colors mt-2 flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white rounded-xl font-bold text-sm transition-colors mt-2 flex items-center justify-center gap-2"
               >
-                <Send className="w-4 h-4" /> Submit Loan Application
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" /> Submit Loan Application
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -537,7 +609,9 @@ export default function Home() {
 
             <form onSubmit={handleTechSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Full Name
+                </label>
                 <input
                   type="text"
                   name="fullName"
@@ -551,7 +625,9 @@ export default function Home() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Email
+                  </label>
                   <input
                     type="email"
                     name="email"
@@ -563,7 +639,9 @@ export default function Home() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Phone / WhatsApp</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Phone / WhatsApp
+                  </label>
                   <input
                     type="tel"
                     name="phone"
@@ -577,7 +655,9 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Project Details / Requirements</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Project Details / Requirements
+                </label>
                 <textarea
                   name="projectDetails"
                   rows={3}
